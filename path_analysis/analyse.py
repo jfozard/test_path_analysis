@@ -288,7 +288,11 @@ def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
     data = []
     foci_absolute_intensity, foci_position, foci_position_index, trace_median_intensities, trace_thresholds = analyse_traces(all_paths, path_lengths, measured_traces, config)
 
-    total_intensity = sum(sum(path_foci_abs_int - tmi) for path_foci_abs_int, tmi in zip(foci_absolute_intensity, trace_median_intensities))
+    foci_intensities = []
+    for path_foci_abs_int, tmi in zip(foci_absolute_intensity, trace_median_intensities):
+        foci_intensities.extend(list(path_foci_abs_int - tmi))
+        
+    mean_intensity = np.mean(foci_intensities)
     trace_positions = []
     
     for i in range(n_paths):
@@ -308,7 +312,7 @@ def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
             else:
                 path_data[f'Foci_{j+1}_position(um)'] = u
             path_data[f'Foci_{j+1}_absolute_intensity'] = v
-            path_data[f'Foci_{j+1}_relative_intensity'] = (v - trace_median_intensities[i])/total_intensity
+            path_data[f'Foci_{j+1}_relative_intensity'] = (v - trace_median_intensities[i])/mean_intensity
         data.append(path_data)
         trace_positions.append(pl)
     return pd.DataFrame(data), foci_absolute_intensity, foci_position_index, trace_thresholds, trace_positions

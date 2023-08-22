@@ -40,6 +40,7 @@ with gr.Blocks() as demo:
                 # Resolutions for xy and z axis
 
                 threshold_type = gr.Radio(["per-trace", "per-cell"], label="Threshold-type", value="per-trace", interactive=True)
+                use_corrected_positions = gr.Checkbox(label="Correct foci position measurements", value=True, interactive=True)
 
                  
         # The output column showing the result of processing            
@@ -51,13 +52,15 @@ with gr.Blocks() as demo:
             data_file_output=gr.File(label="Output data file (.csv)")
 
 
-    def process(cellid_input, image_input, path_input, sphere_radius, peak_threshold, xy_res, z_res, threshold_type):
+    def process(cellid_input, image_input, path_input, sphere_radius, peak_threshold, xy_res, z_res, threshold_type, use_corrected_positions):
 
         config = { 'sphere_radius': sphere_radius,
                    'peak_threshold': peak_threshold,
                    'xy_res': xy_res,
                    'z_res': z_res,
-                   'threshold_type': threshold_type }
+                   'threshold_type': threshold_type,
+                   'use_corrected_positions': use_corrected_positions
+        }
                    
         
         paths, traces, fig, extracted_peaks = analyse_paths(cellid_input, image_input.name, path_input.name, config)
@@ -68,7 +71,7 @@ with gr.Blocks() as demo:
             
     with gr.Row():
         greet_btn = gr.Button("Process")
-        greet_btn.click(fn=process, inputs=[cellid_input, image_input, path_input, sphere_radius, peak_threshold, xy_res, z_res, threshold_type], outputs=[trace_output, image_output, plot_output, data_output, data_file_output], api_name="process")
+        greet_btn.click(fn=process, inputs=[cellid_input, image_input, path_input, sphere_radius, peak_threshold, xy_res, z_res, threshold_type, use_corrected_positions], outputs=[trace_output, image_output, plot_output, data_output, data_file_output], api_name="process")
 
 
 if __name__ == "__main__":

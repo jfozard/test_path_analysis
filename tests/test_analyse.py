@@ -1,9 +1,68 @@
 
+import pytest
 from path_analysis.analyse import *
 import numpy as np
 from math import pi
 import xml.etree.ElementTree as ET
+from PIL import ImageChops
 
+def test_draw_paths_no_error():
+    all_paths = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]]
+    foci_stack = np.zeros((5, 5, 5))
+    foci_stack[0,0,0] = 1.0
+    foci_index = [[0], [1]]
+    r = 3
+
+    try:
+        im = draw_paths(all_paths, foci_stack, foci_index, r)
+    except Exception as e:
+        pytest.fail(f"draw_paths raised an exception: {e}")
+
+def test_draw_paths_image_size():
+    all_paths = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]]
+    foci_stack = np.zeros((5, 5, 5))
+    foci_stack[0,0,0] = 1.0
+
+    foci_index = [[0], [1]]
+    r = 3
+
+    im = draw_paths(all_paths, foci_stack, foci_index, r)
+    assert im.size == (5, 5), f"Expected image size (5, 5), got {im.size}"
+
+def test_draw_paths_image_modified():
+    all_paths = [[[0, 0], [1, 1]], [[2, 2], [3, 3]]]
+    foci_stack = np.zeros((5, 5, 5))
+    foci_stack[0,0,0] = 1.0
+    foci_index = [[0], [1]]
+    r = 3
+
+    im = draw_paths(all_paths, foci_stack, foci_index, r)
+    blank_image = Image.new("RGB", (5, 5), "black")
+
+    # Check if the image is not entirely black (i.e., has been modified)
+    diff = ImageChops.difference(im, blank_image)
+    assert diff.getbbox() is not None, "The image has not been modified"
+
+
+
+def test_calculate_path_length_partials_default_voxel():
+    point_list = [(0, 0, 0), (1, 0, 0), (1, 1, 1)]
+    expected_result = np.array([0.0, 1.0, 1.0+np.sqrt(2)])
+    result = calculate_path_length_partials(point_list)
+    np.testing.assert_allclose(result, expected_result, atol=1e-5)
+
+def test_calculate_path_length_partials_custom_voxel():
+    point_list = [(0, 0, 0), (1, 0, 0), (1, 1, 0)]
+    voxel_size = (1, 2, 1)
+    expected_result = np.array([0.0, 1.0, 3.0])
+    result = calculate_path_length_partials(point_list, voxel_size=voxel_size)
+    np.testing.assert_allclose(result, expected_result, atol=1e-5)
+
+def test_calculate_path_length_partials_single_point():
+    point_list = [(0, 0, 0)]
+    expected_result = np.array([0.0])
+    result = calculate_path_length_partials(point_list)
+    np.testing.assert_allclose(result, expected_result, atol=1e-5)
 
 def test_get_paths_from_traces_file():
     # Mock the XML traces file content
@@ -221,3 +280,34 @@ def test_make_sphere_equal():
     assert abs(np.sum(sphere)-4/3*pi*R**3)<10, f"Expected approximate volume to be correct"
     assert (sphere[R,R,0] == 1), f"Expected centre point on top plane to be within sphere"
     assert (sphere[R+1,R,0] == 0), f"Expected point next to centre on top plane to be outside sphere"
+
+import pandas as pd
+
+
+# 1. Test basic functionality
+def test_extract_peaks_basic():
+    cell_id = 1
+    all_paths = [[[0, 0], [1, 1]]]
+    path_lengths = [1.41]  # length of the above path
+    measured_traces = [[100, 200]]  # fluorescence along the path
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'use_corrected_positions': True}
+    
+    df, foci_abs_int, foci_pos_idx, _, _, _ = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+    
+    # Now add your assertions to validate the result
+    assert len(df) == 1, "Expected one row in DataFrame"
+    assert df['Cell_ID'].iloc[0] == cell_id, "Unexpected cell_id"
+    # Add more assertions here based on expected values
+
+# 2. Test multiple paths
+def test_extract_peaks_multiple_paths():
+    cell_id = 1
+    all_paths = [[[0, 0], [1, 1]], [[1, 1], [2, 2]]]
+    path_lengths = [1.41, 1.41]
+    measured_traces = [[100, 200], [100, 150]]
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'use_corrected_positions': True}
+
+    df, _, _, _, _, _ = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+    
+    assert len(df) == 2, "Expected two rows in DataFrame"
+    # Add more assertions here

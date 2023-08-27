@@ -36,22 +36,25 @@ def get_paths_from_traces_file(traces_file):
         path_lengths.append(float(length))
     return all_paths, path_lengths
 
-def calculate_path_length(point_list, voxel_size=(1,1,1)):
-    # Simple calculation
-    l = 0
-    s = np.array(voxel_size)
-    for i in range(len(point_list)-1):
-        l += la.norm(s * (np.array(point_list[i+1]) - np.array(point_list[i])))
-    return l
 
 
 def calculate_path_length_partials(point_list, voxel_size=(1,1,1)):
+    """
+    Calculate the partial path length of a series of points.
+    
+    Args:
+    point_list (list of tuple): List of points, each represented as a tuple of coordinates (x, y, z).
+    voxel_size (tuple, optional): Size of the voxel in each dimension (x, y, z). Defaults to (1, 1, 1).
+    
+    Returns:
+    numpy.ndarray: Array of cumulative partial path lengths at each point.
+    """
     # Simple calculation
-    l = [0.0]
+    section_lengths = [0.0]
     s = np.array(voxel_size)
     for i in range(len(point_list)-1):
-        l.append(la.norm(s * (np.array(point_list[i+1]) - np.array(point_list[i]))))
-    return np.cumsum(l)
+        section_lengths.append(la.norm(s * (np.array(point_list[i+1]) - np.array(point_list[i]))))
+    return np.cumsum(section_lengths)
 
 
 def visualise_ordering(points_list, dim, wr=5, wc=5):
@@ -260,6 +263,7 @@ def measure_chrom2(path, hei10, config):
     measurements = measure_all_with_sphere(path, hei10, op='mean', R=sphere_xy_radius, z_scale_ratio=scale_ratio)
     measurements_max = measure_all_with_sphere(path, hei10, op='max', R=sphere_xy_radius, z_scale_ratio=scale_ratio)
 
+    
     return vis, measurements, measurements_max
 
 def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
@@ -286,7 +290,7 @@ def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
     n_paths = len(all_paths)
     
     data = []
-    foci_absolute_intensity, foci_position, foci_position_index, trace_median_intensities, trace_thresholds = analyse_traces(all_paths, path_lengths, measured_traces, config)
+    foci_absolute_intensity, foci_position, foci_position_index, dominated_foci_data, trace_median_intensities, trace_thresholds = analyse_traces(all_paths, path_lengths, measured_traces, config)
 
     foci_intensities = []
     for path_foci_abs_int, tmi in zip(foci_absolute_intensity, trace_median_intensities):
@@ -298,6 +302,8 @@ def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
     for i in range(n_paths):
 
         pl = calculate_path_length_partials(all_paths[i], (config['xy_res'], config['xy_res'], config['z_res']))
+        
+        print(i, len(all_paths[i]), len(pl))
         
         path_data = { 'Cell_ID':cell_id,
                       'Trace': i+1,
@@ -315,7 +321,7 @@ def extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config):
             path_data[f'Foci_{j+1}_relative_intensity'] = (v - trace_median_intensities[i])/mean_intensity
         data.append(path_data)
         trace_positions.append(pl)
-    return pd.DataFrame(data), foci_absolute_intensity, foci_position_index, trace_thresholds, trace_positions
+    return pd.DataFrame(data), foci_absolute_intensity, foci_position_index, dominated_foci_data, trace_thresholds, trace_positions
 
 
 def analyse_paths(cell_id,
@@ -351,25 +357,32 @@ def analyse_paths(cell_id,
         vis, m, _ = measure_chrom2(p,foci_stack.transpose(2,1,0), config)
         all_trace_vis.append(vis)
         all_m.append(m)
+        
 
-
-    extracted_peaks, foci_absolute_intensity, foci_pos_index, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, all_m, config)
+    extracted_peaks, foci_absolute_intensity, foci_pos_index, dominated_foci_data, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, all_m, config)
 
     
     n_cols = 2
     n_rows = (len(all_paths)+n_cols-1)//n_cols
-    fig, ax = plt.subplots(n_rows,n_cols)
+    fig, ax = plt.subplots(n_rows,n_cols, figsize=(5*n_cols, 3*n_rows))
     ax = ax.flatten()
 
     for i, m in enumerate(all_m):
         ax[i].set_title(f'Trace {i+1}')
         ax[i].plot(trace_positions[i], m)
-        print(foci_pos_index)
         if len(foci_pos_index[i]):
             ax[i].plot(trace_positions[i][foci_pos_index[i]], np.array(m)[foci_pos_index[i]], 'rx')
-            ax[i].set_xlabel('Distance from start (um)')
-            ax[i].set_ylabel('Intensity')
+
+        if len(dominated_foci_data[i]):
+
+            dominated_foci_pos_index = [u.idx for u in dominated_foci_data[i]]
+            ax[i].plot(trace_positions[i][dominated_foci_pos_index], np.array(m)[dominated_foci_pos_index], color=(0.5,0.5,0.5), marker='o', linestyle='None')
+
+            
+        if trace_thresholds[i] is not None:
             ax[i].axhline(trace_thresholds[i], c='r', ls=':')
+        ax[i].set_xlabel('Distance from start (um)')
+        ax[i].set_ylabel('Intensity')
     for i in range(len(all_m), n_cols*n_rows):
         ax[i].axis('off')
 

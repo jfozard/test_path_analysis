@@ -128,8 +128,8 @@ def test_process_cell_traces_peaks(mock_data):
 # Mock data
 @pytest.fixture
 def mock_celldata():
-    pathdata1 = PathData(peaks=[0, 5], points=[(0,0,0), (0,2,0), (0,5,0), (0,10,0), (0,15,0), (0,20,0)], removed_peaks=[], o_hei10=[100, 8, 3, 2, 3, 69], SC_length=2.2)
-    pathdata2 = PathData(peaks=[2], points=[(1,20,0), (1,20,10), (1,20,20) ], removed_peaks=[RemovedPeakData(0, (0,5))], o_hei10=[38, 2, 20], SC_length=2.3)
+    pathdata1 = PathData(peaks=[0, 5], points=[(0,0,0), (0,2,0), (0,5,0), (0,10,0), (0,15,0), (0,20,0)], removed_peaks=[], o_intensity=[100, 8, 3, 2, 3, 69], SC_length=2.2)
+    pathdata2 = PathData(peaks=[2], points=[(1,20,0), (1,20,10), (1,20,20) ], removed_peaks=[RemovedPeakData(0, (0,5))], o_intensity=[38, 2, 20], SC_length=2.3)
     return CellData(pathdata_list=[pathdata1, pathdata2])
 
 def test_analyse_celldata(mock_celldata):

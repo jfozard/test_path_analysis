@@ -74,10 +74,10 @@ class RemovedPeakData(object):
 
     Attributes:
         idx (int): Index of peak along path
-        dominating_peak (tuple): (path_idx, position along path) for dominating peak
+        screening_peak (tuple): (path_idx, position along path) for screening peak
     """
     idx: int 
-    dominating_peak: tuple 
+    screening_peak: tuple 
 
 @dataclass
 class PathData(object):
@@ -86,17 +86,17 @@ class PathData(object):
     This dataclass encapsulates information about the peaks, 
     the defining points, the fluorescence values, and the path length of a specific path.
 
-    Attributes: peaks (list): List of peaks in the path (indicies of positions in points, o_hei10).
+    Attributes: peaks (list): List of peaks in the path (indicies of positions in points, o_intensity).
         removed_peaks (list): List of peaks in the path which have been removed because of a nearby larger peak
         points (list): List of points defining the path.
-        o_hei10 (list): List of (unnormalized) fluorescence intensity values along the path
+        o_intensity (list): List of (unnormalized) fluorescence intensity values along the path
         SC_length (float): Length of the path.
 
     """
     peaks: list
     removed_peaks: list
     points: list
-    o_hei10: list
+    o_intensity: list
     SC_length: float
 
 @dataclass
@@ -138,7 +138,7 @@ def find_peaks2(v, distance=5,  prominence=0.5):
     return n_peaks, _
           
 
-def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
+def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence, dmin=10):
     """
     Process traces of cells to extract peak information and organize the data.
 
@@ -152,6 +152,7 @@ def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
         path_lengths (list of float): List of path lengths corresponding to the provided paths.
         measured_trace_fluorescence (list of list of float): A list containing fluorescence 
                                                             data corresponding to each path point.
+        dmin (float): Distance below which brighter peaks screen less bright ones.
 
     Returns:
         CellData: An object containing organized peak and path data for a given cell.
@@ -163,17 +164,17 @@ def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
     
     cell_peaks = []
 
-    for points, o_hei10 in zip(all_paths, measured_trace_fluorescence):
+    for points, o_intensity in zip(all_paths, measured_trace_fluorescence):
                      
         # For peak determination normalize each trace to have mean zero and s.d. 1
-        hei10_normalized = (o_hei10 - np.mean(o_hei10))/np.std(o_hei10)
+        intensity_normalized = (o_intensity - np.mean(o_intensity))/np.std(o_intensity)
         
         # Find peaks - these will be further refined later
-        p,_ = find_peaks2(hei10_normalized, distance=5,  prominence=0.5*np.std(hei10_normalized))
+        p,_ = find_peaks2(intensity_normalized, distance=5,  prominence=0.5*np.std(intensity_normalized))
         peaks = np.array(p, dtype=np.int32)
 
         # Store peak data - using original values, not normalized ones
-        peak_mean_heights = [ o_hei10[u] for u in peaks ]
+        peak_mean_heights = [ o_intensity[u] for u in peaks ]
         peak_points = [ points[u] for u in peaks ]
         
         cell_peaks.append((peaks, peak_points, peak_mean_heights))
@@ -188,7 +189,7 @@ def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
             to_thin.append(PeakData(pos=cell_peaks[k][1][u], intensity=cell_peaks[k][2][u], key=(k, u)))
     
     # Exclude any peak with a nearby brighter peak (on any SC)
-    removed_peaks, removed_larger_peaks = thin_peaks(to_thin, return_larger_peaks=True)
+    removed_peaks, removed_larger_peaks = thin_peaks(to_thin, return_larger_peaks=True, dmin=dmin)
 
     # Clean up and remove these peaks
     new_cell_peaks = []
@@ -206,7 +207,7 @@ def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
                 # What's the larger point?
                 idx = removed_peaks.index((path_idx, peak_idx))
                 larger_path, larger_idx = removed_larger_peaks[idx]        
-                path_removed_peaks.append(RemovedPeakData(idx=path_peaks[peak_idx], dominating_peak=(larger_path, cell_peaks[larger_path][0][larger_idx])))
+                path_removed_peaks.append(RemovedPeakData(idx=path_peaks[peak_idx], screening_peak=(larger_path, cell_peaks[larger_path][0][larger_idx])))
                 ###
                  
         new_cell_peaks.append(path_retained_peaks)
@@ -215,15 +216,15 @@ def process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence):
     cell_peaks = new_cell_peaks
     pd_list = []
     
-    # Save peak positions, absolute HEI10 intensities, and length for each SC
+    # Save peak positions, absolute intensity intensities, and length for each SC
     for k in range(len(all_paths)):
         
-        points, o_hei10 = all_paths[k], measured_trace_fluorescence[k]
+        points, o_intensity = all_paths[k], measured_trace_fluorescence[k]
 
         peaks = cell_peaks[k]
         removed_peaks = removed_cell_peaks[k]
         
-        pd = PathData(peaks=peaks, removed_peaks=removed_peaks, points=points, o_hei10=o_hei10, SC_length=path_lengths[k])
+        pd = PathData(peaks=peaks, removed_peaks=removed_peaks, points=points, o_intensity=o_intensity, SC_length=path_lengths[k])
         pd_list.append(pd)
 
     cd = CellData(pathdata_list=pd_list)
@@ -235,7 +236,7 @@ alpha_max = 0.4
 
 
 # Criterion used for identifying peak as a focus - normalized (with mean and s.d.)
-# hei10 levels being above 0.4 time maximum peak level
+# intensity levels being above 0.4 time maximum peak level
 def focus_criterion(pos, v, alpha=alpha_max):
     """
     Identify and return positions where values in the array `v` exceed a certain threshold.
@@ -271,14 +272,14 @@ def analyse_celldata(cell_data, config):
             - foci_rel_intensity (list): List of relative intensities for the detected foci.
             - foci_pos (list): List of absolute positions of the detected foci.
             - foci_pos_index (list): List of indices of the detected foci.
-            - dominated_foci_data (list): List of RemovedPeakData indicating positions of removed peaks and the index of the larger peak
+            - screened_foci_data (list): List of RemovedPeakData indicating positions of removed peaks and the index of the larger peak
             - trace_median_intensities (list): Per-trace median intensity
             - trace_thresholds (list): Per-trace absolute threshold for calling peaks as foci
     """
     foci_abs_intensity = []
     foci_pos = []
     foci_pos_index = []
-    dominated_foci_data = []
+    screened_foci_data = []
     trace_median_intensities = []
     trace_thresholds = []
     
@@ -296,12 +297,11 @@ def analyse_celldata(cell_data, config):
 
             # Normalize extracted fluorescent intensities by subtracting mean (and dividing
             # by standard deviation - note that the latter should have no effect on the results).
-            h = np.array(path_data.o_hei10)
+            h = np.array(path_data.o_intensity)
             h = h - np.mean(h)
             h = h/np.std(h)
             # Extract foci according to criterion
             foci_idx = focus_criterion(peaks, h[peaks], peak_threshold) 
-            print('peaks', peaks, h[peaks], foci_idx, np.mean(path_data.o_hei10))
             
             #
             removed_peaks = path_data.removed_peaks
@@ -309,30 +309,30 @@ def analyse_celldata(cell_data, config):
 
             
             if len(peaks):
-                trace_thresholds.append((1-peak_threshold)*np.mean(path_data.o_hei10) + peak_threshold*np.max(np.array(path_data.o_hei10)[peaks]))
+                trace_thresholds.append((1-peak_threshold)*np.mean(path_data.o_intensity) + peak_threshold*np.max(np.array(path_data.o_intensity)[peaks]))
             else:
                 trace_thresholds.append(None)
 
             if len(removed_peaks):
                 if len(peaks):
-                    threshold = (1-peak_threshold)*np.mean(path_data.o_hei10) + peak_threshold*np.max(np.array(path_data.o_hei10)[peaks])
+                    threshold = (1-peak_threshold)*np.mean(path_data.o_intensity) + peak_threshold*np.max(np.array(path_data.o_intensity)[peaks])
                 else:
                     threshold = float('-inf')
 
                 
-                removed_peak_heights = np.array(path_data.o_hei10)[removed_peaks_idx]
-                dominated_foci_idx = np.where(removed_peak_heights>threshold)[0]
+                removed_peak_heights = np.array(path_data.o_intensity)[removed_peaks_idx]
+                screened_foci_idx = np.where(removed_peak_heights>threshold)[0]
                 
-                dominated_foci_data.append([removed_peaks[i] for i in dominated_foci_idx])
+                screened_foci_data.append([removed_peaks[i] for i in screened_foci_idx])
             else:
-                dominated_foci_data.append([])
+                screened_foci_data.append([])
                 
             pos_abs = (foci_idx/len(path_data.points))*path_data.SC_length
             foci_pos.append(pos_abs)
-            foci_abs_intensity.append(np.array(path_data.o_hei10)[foci_idx])
+            foci_abs_intensity.append(np.array(path_data.o_intensity)[foci_idx])
             
             foci_pos_index.append(foci_idx)
-            trace_median_intensities.append(np.median(path_data.o_hei10))
+            trace_median_intensities.append(np.median(path_data.o_intensity))
             
     elif threshold_type == 'per-cell':
         """
@@ -343,7 +343,7 @@ def analyse_celldata(cell_data, config):
 
             # Normalize extracted fluorescent intensities by subtracting mean (and dividing
             # by standard deviation - note that the latter should have no effect on the results).
-            h = np.array(path_data.o_hei10)
+            h = np.array(path_data.o_intensity)
             h = h - np.mean(h)
             max_cell_intensity = max(max_cell_intensity, np.max(h))
 
@@ -352,7 +352,7 @@ def analyse_celldata(cell_data, config):
 
             # Normalize extracted fluorescent intensities by subtracting mean (and dividing
             # by standard deviation - note that the latter should have no effect on the results).
-            h = np.array(path_data.o_hei10)
+            h = np.array(path_data.o_intensity)
             h = h - np.mean(h)
 
             foci_idx = peaks[h[peaks]>peak_threshold*max_cell_intensity]
@@ -360,33 +360,33 @@ def analyse_celldata(cell_data, config):
             removed_peaks = path_data.removed_peaks
             removed_peaks_idx = np.array([u.idx for u in removed_peaks], dtype=np.int32)
 
-            trace_thresholds.append(np.mean(path_data.o_hei10) + peak_threshold*max_cell_intensity)
+            trace_thresholds.append(np.mean(path_data.o_intensity) + peak_threshold*max_cell_intensity)
 
             if len(removed_peaks):
-                threshold = np.mean(path_data.o_hei10) + peak_threshold*max_cell_intensity
+                threshold = np.mean(path_data.o_intensity) + peak_threshold*max_cell_intensity
 
-                removed_peak_heights = np.array(path_data.o_hei10)[removed_peaks_idx]
-                dominated_foci_idx = np.where(removed_peak_heights>threshold)[0]
+                removed_peak_heights = np.array(path_data.o_intensity)[removed_peaks_idx]
+                screened_foci_idx = np.where(removed_peak_heights>threshold)[0]
                 
-                dominated_foci_data.append([removed_peaks[i] for i in dominated_foci_idx])
+                screened_foci_data.append([removed_peaks[i] for i in screened_foci_idx])
             else:
-                dominated_foci_data.append([])
+                screened_foci_data.append([])
 
             pos_abs = (foci_idx/len(path_data.points))*path_data.SC_length
             foci_pos.append(pos_abs)
-            foci_abs_intensity.append(np.array(path_data.o_hei10)[foci_idx])
+            foci_abs_intensity.append(np.array(path_data.o_intensity)[foci_idx])
             
             foci_pos_index.append(foci_idx)
-            trace_median_intensities.append(np.median(path_data.o_hei10))            
+            trace_median_intensities.append(np.median(path_data.o_intensity))            
             
     else:
         raise NotImplementedError
     
-    return foci_abs_intensity, foci_pos, foci_pos_index, dominated_foci_data, trace_median_intensities, trace_thresholds
+    return foci_abs_intensity, foci_pos, foci_pos_index, screened_foci_data, trace_median_intensities, trace_thresholds
 
 def analyse_traces(all_paths, path_lengths, measured_trace_fluorescence, config):
     
-    cd = process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence)
+    cd = process_cell_traces(all_paths, path_lengths, measured_trace_fluorescence, dmin=config['screening_distance'])
 
     return analyse_celldata(cd, config)
 

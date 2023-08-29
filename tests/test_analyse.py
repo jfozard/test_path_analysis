@@ -1,6 +1,7 @@
 
 import pytest
 from path_analysis.analyse import *
+from path_analysis.data_preprocess import RemovedPeakData
 import numpy as np
 from math import pi
 import xml.etree.ElementTree as ET
@@ -99,7 +100,7 @@ def test_get_paths_from_traces_file():
 def test_measure_chrom2():
     # Mock data
     path = [(2, 3, 4), (4, 5, 6), (9, 9, 9)]  # Sample ordered path points
-    hei10 = np.random.rand(10, 10, 10)  # Random 3D fluorescence data
+    intensity = np.random.rand(10, 10, 10)  # Random 3D fluorescence data
     config = {
         'z_res': 1,
         'xy_res': 0.5,
@@ -107,7 +108,7 @@ def test_measure_chrom2():
     }
 
     # Function call
-    _, measurements, measurements_max = measure_chrom2(path, hei10, config)
+    _, measurements, measurements_max = measure_chrom2(path, intensity, config)
     
     # Assertions
     assert len(measurements) == len(path), "Measurements length should match path length"
@@ -118,7 +119,7 @@ def test_measure_chrom2():
 def test_measure_chrom2_z():
     # Mock data
     path = [(2, 3, 4), (4, 5, 6)]  # Sample ordered path points
-    _,_,hei10 = np.meshgrid(np.arange(10), np.arange(10), np.arange(10))  # 3D fluorescence data - z dependent
+    _,_,intensity = np.meshgrid(np.arange(10), np.arange(10), np.arange(10))  # 3D fluorescence data - z dependent
     config = {
         'z_res': 1,
         'xy_res': 0.5,
@@ -126,7 +127,7 @@ def test_measure_chrom2_z():
     }
 
     # Function call
-    _, measurements, measurements_max = measure_chrom2(path, hei10, config)
+    _, measurements, measurements_max = measure_chrom2(path, intensity, config)
     
     # Assertions
     assert len(measurements) == len(path), "Measurements length should match path length"
@@ -137,7 +138,7 @@ def test_measure_chrom2_z():
 def test_measure_chrom2_z2():
     # Mock data
     path = [(0,0,0), (2, 3, 4), (4, 5, 6)]  # Sample ordered path points
-    _,_,hei10 = np.meshgrid(np.arange(10), np.arange(10), np.arange(10))  # 3D fluorescence data - z dependent
+    _,_,intensity = np.meshgrid(np.arange(10), np.arange(10), np.arange(10))  # 3D fluorescence data - z dependent
     config = {
         'z_res': 0.25,
         'xy_res': 0.5,
@@ -145,7 +146,7 @@ def test_measure_chrom2_z2():
     }
 
     # Function call
-    _, measurements, measurements_max = measure_chrom2(path, hei10, config)
+    _, measurements, measurements_max = measure_chrom2(path, intensity, config)
     
     # Assertions
     assert len(measurements) == len(path), "Measurements length should match path length"
@@ -283,31 +284,87 @@ def test_make_sphere_equal():
 
 import pandas as pd
 
-
-# 1. Test basic functionality
 def test_extract_peaks_basic():
-    cell_id = 1
-    all_paths = [[[0, 0], [1, 1]]]
+    cell_id = 1 # Simple per-cell tag
+    all_paths = [[[0, 0, 0], [1, 1, 0]]] # Single, simple path
     path_lengths = [1.41]  # length of the above path
     measured_traces = [[100, 200]]  # fluorescence along the path
-    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'use_corrected_positions': True}
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'threshold_type':'per-cell', 'use_corrected_positions': True, 'screening_distance':10 }
     
-    df, foci_abs_int, foci_pos_idx, _, _, _ = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
-    
-    # Now add your assertions to validate the result
+    df, foci_absolute_intensity, foci_pos_index, screened_foci_data, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+
     assert len(df) == 1, "Expected one row in DataFrame"
     assert df['Cell_ID'].iloc[0] == cell_id, "Unexpected cell_id"
-    # Add more assertions here based on expected values
+    assert list(df['Trace_foci_number']) == [1], "Wrong foci number"
+    assert df['Foci_1_position(um)'].iloc[0] == np.sqrt(2)
+    assert foci_pos_index == [[1]]
+    assert foci_absolute_intensity == [[200]]
+    assert screened_foci_data == [[]]
+    assert trace_thresholds == [ [ 150+0.4*50] ]
+    assert np.all(trace_positions[0] ==  np.array([0, np.sqrt(2)]))
 
-# 2. Test multiple paths
 def test_extract_peaks_multiple_paths():
     cell_id = 1
-    all_paths = [[[0, 0], [1, 1]], [[1, 1], [2, 2]]]
+    all_paths = [[[0, 0, 0], [1, 1, 0]], [[1, 1, 200], [2, 2, 200]]]
+    path_lengths = [1.41, 1.41]
+    measured_traces = [[100, 200], [100, 140]]
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'threshold_type':'per-trace', 'use_corrected_positions': True, 'screening_distance':10 }
+
+    df, foci_absolute_intensity, foci_pos_index, screened_foci_data, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+    
+
+
+    assert len(df) == 2, "Expected two rows in DataFrame"
+    assert df['Cell_ID'].iloc[0] == cell_id, "Unexpected cell_id"
+    assert list(df['Trace_foci_number']) == [1,1], "Wrong foci number"
+    assert df['Foci_1_position(um)'].iloc[0] == np.sqrt(2)
+    print(foci_pos_index)
+    assert list(map(list, foci_pos_index)) == [[1],[1]]
+    assert list(map(list, foci_absolute_intensity)) == [[200],[140]]
+    assert trace_thresholds == [ 150+0.4*50, 120+0.4*20 ]
+    assert np.all(trace_positions[0] ==  np.array([0, np.sqrt(2)]))
+    assert screened_foci_data == [[],[]]
+
+def test_extract_peaks_multiple_paths_screened():
+    cell_id = 1
+    all_paths = [[[0, 0, 0], [1, 1, 0]], [[1, 1, 2], [2, 2, 2]]]
     path_lengths = [1.41, 1.41]
     measured_traces = [[100, 200], [100, 150]]
-    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'use_corrected_positions': True}
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'threshold_type':'per-trace', 'use_corrected_positions': True, 'screening_distance':10 }
 
-    df, _, _, _, _, _ = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+    df, foci_absolute_intensity, foci_pos_index, screened_foci_data, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
     
+
+
     assert len(df) == 2, "Expected two rows in DataFrame"
-    # Add more assertions here
+    assert df['Cell_ID'].iloc[0] == cell_id, "Unexpected cell_id"
+    assert list(df['Trace_foci_number']) == [1,0], "Wrong foci number"
+    assert df['Foci_1_position(um)'].iloc[0] == np.sqrt(2)
+    print(foci_pos_index)
+    assert list(map(list, foci_pos_index)) == [[1],[]]
+    assert list(map(list, foci_absolute_intensity)) == [[200],[]]
+    assert trace_thresholds == [ 150+0.4*50, None ]
+    assert np.all(trace_positions[0] ==  np.array([0, np.sqrt(2)]))
+    assert screened_foci_data == [[],[RemovedPeakData(idx=1, screening_peak=(0,1))]]
+
+
+def test_extract_peaks_multiple_paths_per_cell():
+    cell_id = 1
+    all_paths = [[[0, 0, 0], [1, 1, 0]], [[1, 1, 200], [2, 2, 200]]]
+    path_lengths = [1.41, 1.41]
+    measured_traces = [[100, 200], [100, 140]]
+    config = {'peak_threshold': 0.4, 'sphere_radius': 2, 'xy_res': 1, 'z_res': 1, 'threshold_type':'per-cell', 'use_corrected_positions': True, 'screening_distance':10 } 
+
+    df, foci_absolute_intensity, foci_pos_index, screened_foci_data, trace_thresholds, trace_positions = extract_peaks(cell_id, all_paths, path_lengths, measured_traces, config)
+    
+
+
+    assert len(df) == 2, "Expected two rows in DataFrame"
+    assert df['Cell_ID'].iloc[0] == cell_id, "Unexpected cell_id"
+    assert list(df['Trace_foci_number']) == [1,0], "Wrong foci number"
+    assert df['Foci_1_position(um)'].iloc[0] == np.sqrt(2)
+    assert list(map(list, foci_pos_index)) == [[1],[]]
+    assert list(map(list, foci_absolute_intensity)) == [[200],[]]
+    assert trace_thresholds == [ 150+0.4*50, 120+0.4*50 ]
+    assert np.all(trace_positions[0] ==  np.array([0, np.sqrt(2)]))
+    assert screened_foci_data == [[],[]]

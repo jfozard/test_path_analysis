@@ -1,0 +1,7 @@
+pillow
+tifffile
+matplotlib
+numpy
+lxml
+pandas
+scipy

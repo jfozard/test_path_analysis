@@ -42,6 +42,8 @@ Browse to http://127.0.0.1:7860
 
 ## Basic usage
 
+![usage](https://github.com/jfozard/test_path_analysis/assets/4390954/3519b10f-041e-4fa1-b8b2-8a648fd66c9c)
+
 Upload foci-containing stack (HEI10). Also upload axis traces extracted by SNT (SNT_Data.traces).
 Set X-Y and Z resolutions appropriately in "Additional options"
 

@@ -9,13 +9,13 @@ Install
 To run demo
 ``` python app.py ``
 
-Browse at http://127.0.0.1:7860
+Browse to http://127.0.0.1:7860
 
 ## Local use (Docker container)
 
 Docker container - create from Dockerfile
 
-On Linux
+### On Linux
 
 Clone the repository
 
@@ -34,6 +34,11 @@ Run
 docker run -dp 127.0.0.1:7860:7860 meioquant
 ```
 
+Browse to http://127.0.0.1:7860
+
+### On Windows
+
+(TODO)
 
 ## Basic usage
 

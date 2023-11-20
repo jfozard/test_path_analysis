@@ -7,7 +7,7 @@ Install
 ``` pip install -r (requirements.txt).```
 
 To run demo
-``` python app.py ``
+``` python app.py ```
 
 Browse to http://127.0.0.1:7860
 

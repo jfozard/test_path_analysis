@@ -1,13 +1,7 @@
----
-title: MeioQuant
-emoji: 📚
-colorFrom: gray
-colorTo: yellow
-sdk: gradio
-sdk_version: 3.41.2
-app_file: app.py
-pinned: false
-license: bsd-3-clause
----
 
-Check out the configuration reference at https://huggingface.co/docs/hub/spaces-config-reference
+# Gradio tool for quantifying foci on meiotic chromosomes
+
+Use - install (requirements.txt). 
+``` python app.py ```
+
+Online demo at https://huggingface.co/spaces/JFoz/test_path_analysis

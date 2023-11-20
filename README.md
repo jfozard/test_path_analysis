@@ -4,7 +4,11 @@
 ## Local Use (Python)
 
 Install 
-``` pip install -r (requirements.txt).```
+``` 
+git clone https://github.com/jfozard/test_path_analysis
+cd test_path_analysis
+pip install -r requirements.txt
+```
 
 To run demo
 ``` python app.py ```

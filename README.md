@@ -40,6 +40,12 @@ docker run -dp 127.0.0.1:7860:7860 meioquant
 
 Browse to http://127.0.0.1:7860
 
+Also on DockerHub
+
+```
+docker pull jfozard/meioquant
+```
+
 ### On Windows
 
 (TODO)
